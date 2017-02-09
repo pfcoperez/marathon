@@ -30,7 +30,7 @@ class AppStartActor(
 
   override val nrToStart: Int = scaleTo
 
-  override def initializeStart(): Unit = {
+  override def initializeStart(): Unit = { //pfperez: Hook for the preStart template given by [[StartingBehavior]]
     // In case we already have running instances (can happen on master abdication during deployment)
     // with the correct version those will not be killed.
     val runningInstances = currentInstances.count(_.isActive)

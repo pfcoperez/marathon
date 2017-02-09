@@ -62,6 +62,9 @@ class MarathonSchedulerActor private (
   // TODO (AD): DeploymentManager has already all the information about running deployments.
   // MarathonSchedulerActor should only save the locks resulting from scale and kill operations,
   // asking DeploymentManager for deployment locks.
+  /*pfperez: This seems to be the actor state variable set, I'd wrap it in a case class,
+     in that case you can even make use of the state propagation through become
+   */
   val lockedRunSpecs = collection.mutable.Map[PathId, Int]().withDefaultValue(0)
   var schedulerActions: SchedulerActions = _
   var deploymentManager: ActorRef = _
@@ -101,7 +104,7 @@ class MarathonSchedulerActor private (
     case LocalLeadershipEvent.Standby =>
     // ignored
     // FIXME: When we get this while recovering deployments, we become active anyway
-    // and drop this message.
+    // and drop this message. //pfcoperez: Maybe each plan could be sent to myself (state machine)
 
     case _ => stash()
   }
@@ -120,7 +123,7 @@ class MarathonSchedulerActor private (
       import akka.pattern.pipe
       import context.dispatcher
       val reconcileFuture = activeReconciliation match {
-        case None =>
+        case None => //pfperez: This could be a getOrElse, couldn't it?
           log.info("initiate task reconciliation")
           val newFuture = schedulerActions.reconcileTasks(driver)
           activeReconciliation = Some(newFuture)
@@ -131,7 +134,7 @@ class MarathonSchedulerActor private (
             // the self notification MUST happen before informing the initiator
             // if we want to ensure that we trigger a new reconciliation for
             // the first call after the last ReconcileTasks.answer has been received.
-            .andThen { case _ => self ! ReconcileFinished }
+            .andThen { case _ => self ! ReconcileFinished } //pfperez: why not pipe here?
         case Some(active) =>
           log.info("task reconciliation still active, reusing result")
           active
@@ -273,6 +276,9 @@ class MarathonSchedulerActor private (
     deploymentManager ! StartDeployment(plan, origSender, cmd.force)
   }
 
+  /* pfperez: The following two methods could coalesce into one receiving  a Try[DeploymentPlan] and that
+              single method could take the responsability of freeing the acquired locks
+  * */
   def deploymentSuccess(plan: DeploymentPlan): Unit = {
     log.info(s"Deployment ${plan.id}:${plan.version} of ${plan.target.id} finished")
     eventBus.publish(DeploymentSuccess(plan.id, plan))
@@ -451,6 +457,7 @@ class SchedulerActions(
   def scale(runSpec: RunSpec): Future[Done] = async {
     log.debug("Scale for run spec {}", runSpec)
 
+    //pfperez: Maybe Future composition instead of await within futures?
     val runningInstances = await(instanceTracker.specInstances(runSpec.id)).filter(_.state.condition.isActive)
 
     def killToMeetConstraints(notSentencedAndRunning: Seq[Instance], toKillCount: Int) = {

@@ -36,6 +36,7 @@ trait StartingBehavior extends ReadinessBehavior { this: Actor =>
     context.system.scheduler.scheduleOnce(1.seconds, self, Sync)
   }
 
+  //pfperez: This trait makes quite difficult to leverage "context.become"
   final override def receive: Receive = readinessBehavior orElse commonBehavior
 
   def commonBehavior: Receive = {

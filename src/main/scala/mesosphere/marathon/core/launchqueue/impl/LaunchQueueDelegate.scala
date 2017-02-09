@@ -16,7 +16,7 @@ import scala.concurrent.{ Await, Future }
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-private[launchqueue] class LaunchQueueDelegate(
+private[launchqueue] class LaunchQueueDelegate( //pfperez: It is an interface to actor delegate
     config: LaunchQueueConfig,
     actorRef: ActorRef,
     rateLimiterRef: ActorRef) extends LaunchQueue with StrictLogging {
