@@ -11,6 +11,7 @@ import akka.event.EventStream
 import com.codahale.metrics.MetricRegistry
 import mesosphere.marathon.core.base._
 import mesosphere.marathon.metrics.Metrics
+import mesosphere.marathon.util.RichLock
 import org.apache.curator.framework.api.ACLProvider
 import org.apache.curator.framework.imps.CuratorFrameworkState
 import org.apache.curator.framework.recipes.leader.{ LeaderLatch, LeaderLatchListener }
@@ -43,16 +44,20 @@ class CuratorElectionService(
   /* We re-use the single thread executor here because code locks (via synchronized) frequently */
   override protected implicit val executionContext: ExecutionContext = ExecutionContext.fromExecutor(callbackExecutor)
 
+  private val lock = RichLock()
+
   private lazy val client = provideCuratorClient()
   private var maybeLatch: Option[LeaderLatch] = None
 
   system.registerOnTermination {
-    logger.info("Stopping leadership on shutdown.")
-    stopLeadership()
-    client.close()
+    lock {
+      logger.info("Stopping leadership on shutdown.")
+      stopLeadership()
+      client.close()
+    }
   }
 
-  override def leaderHostPortImpl: Option[String] = synchronized {
+  override def leaderHostPortImpl: Option[String] = lock {
     if (client.getState() == CuratorFrameworkState.STOPPED) None
     else {
       try {
@@ -68,7 +73,7 @@ class CuratorElectionService(
     }
   }
 
-  override def offerLeadershipImpl(): Unit = synchronized {
+  override def offerLeadershipImpl(): Unit = lock {
     logger.info("Using HA and therefore offering leadership")
     maybeLatch.foreach { latch =>
       logger.info("Offering leadership while being candidate")
@@ -111,7 +116,7 @@ class CuratorElectionService(
     *
     */
   private object ConnectionLostListener extends ConnectionStateListener {
-    override def stateChanged(client: CuratorFramework, newState: ConnectionState): Unit = {
+    override def stateChanged(client: CuratorFramework, newState: ConnectionState): Unit = lock {
       if (!newState.isConnected) {
         logger.info("Lost connection to ZooKeeper as leader — Committing suicide")
         stopLeadership()
@@ -121,7 +126,7 @@ class CuratorElectionService(
     }
   }
 
-  private[this] def onAbdicate(error: Boolean): Unit = synchronized {
+  private[this] def onAbdicate(error: Boolean): Unit = lock {
     maybeLatch match {
       case None => logger.error(s"Abdicating leadership while not being leader (error: $error)")
       case Some(latch) =>

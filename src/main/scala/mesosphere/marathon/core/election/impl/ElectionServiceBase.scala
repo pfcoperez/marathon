@@ -168,7 +168,9 @@ abstract class ElectionServiceBase(
     }
 
     // call abdication continuations
-    if (reoffer) {
+    // Might cause a deadlock in CuratorElectionService if state is Abdicating. That's why we call offerLeadership
+    // asynchronously.
+    if (reoffer) Future {
       offerLeadership(candidate)
     }
   }
